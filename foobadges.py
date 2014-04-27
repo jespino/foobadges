@@ -1,8 +1,12 @@
 import settings
 import json
-import service
 from flask import Flask
+from pymongo import MongoClient
+
 app = Flask(__name__)
+
+client = MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
+db = client[settings.MONGO_DB]
 
 @app.route('/')
 def home():
@@ -10,10 +14,11 @@ def home():
 
 @app.route("/revoked")
 def revoked():
-    return json.dumps(service.get_revocation_list())
+    cursor = db.revocations.find(fields={"_id": False})
+    return json.dumps(list(cursor))
 
-@app.route("/organization")
-def organization():
+@app.route("/issuer")
+def issuer():
     return json.dumps({
         'name': settings.ISSUER_NAME,
         'image': settings.ISSUER_IMAGE_URL,
@@ -24,15 +29,13 @@ def organization():
 
 @app.route("/assertion/<assertion_id>")
 def assertion(assertion_id):
-    return json.dumps(service.get_assertion_by_id(assertion_id))
-
-@app.route("/criterion/<criterion_slug>")
-def criterion(criterion_slug):
-    return json.dumps(service.get_criterion_by_slug(criterion_slug))
+    assertion = db.assertions.find_one({"_id": assertion_id}, fields={"_id": False})
+    return json.dumps(assertion)
 
 @app.route("/badge/<badge_slug>")
 def badge(badge_slug):
-    return json.dumps(service.get_badge_by_slug(badge_slug))
+    badge = db.badges.find_one({"_id": badge_slug}, fields={"_id": False})
+    return json.dumps(badge)
 
 if __name__ == '__main__':
     app.run(debug=True)
