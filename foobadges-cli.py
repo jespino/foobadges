@@ -2,10 +2,16 @@ from pymongo import MongoClient
 import settings
 from cmd import Cmd
 import sys
+from uuid import uuid4
+import hashlib
+
+from datetime import datetime
 
 client = MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
 db = client[settings.MONGO_DB]
 
+def generateBadgeImage(badge_img, assertion_uuid):
+    return None
 
 class FooBadgesCmdClient(Cmd):
     def do_EOF(self, args):
@@ -53,6 +59,55 @@ class FooBadgesCmdClient(Cmd):
             "tags": tags,
             "issuer": "/issuer"
         })
+
+    def do_new_assertion(self, args):
+        _id = uuid4()
+
+        identity_salt = uuid4().hex[:5]
+        identity_type = "email"
+        identity_hashed = True
+        email = input("Email: ")
+        identity_hash = 'sha256$' + hashlib.sha256((email + identity_salt).encode('utf-8')).hexdigest()
+
+        evidence = input("Url with evidence of the work (or blank): ")
+        expires = input("Expiration date YYYY-MM-DD format (or blank): ")
+
+        print("Badges")
+        print("------")
+        for badge in db.badges.find():
+            print("  - {}".format(badge['_id']))
+
+        badge_slug = input("Slug: ")
+        badge_url = "/badge/{}".format(badge_slug)
+        badge_img = "/badge_image/{}.png".format(badge_slug)
+
+        assertion_url = "/assertion/{}".format(_id)
+
+        data = {
+            "_id": _id,
+            "uid": _id,
+            "recipient": {
+                "identity": identity_hash,
+                "type": identity_type,
+                "hashed": identity_hashed,
+                "salt": identity_salt,
+            },
+            "badge": badge_url,
+            "verify": {
+                "type": "hosted",
+                "url": assertion_url,
+            },
+            "issuedOn": datetime.now("%Y-%m-%d"),
+            "image": generateBadgeImage(badge_img, _id)
+        }
+
+        if expires:
+            data['expires'] = expires
+
+        if evidence:
+            data["evidence"] = evidence
+
+        db.assertions.insert(data)
 
 if __name__ == '__main__':
     cmd = FooBadgesCmdClient()
