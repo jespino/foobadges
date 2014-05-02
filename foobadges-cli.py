@@ -5,13 +5,30 @@ import sys
 from uuid import uuid4
 import hashlib
 
-from datetime import datetime
+from datetime import date
 
 client = MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
 db = client[settings.MONGO_DB]
 
-def generateBadgeImage(badge_img, assertion_uuid):
+def generate_badge_image(badge_img, assertion_uuid):
     return None
+
+def base_url(settings):
+    if ((settings.SERVER_PORT == 80 and settings.SERVER_PROTOCOL == "http")
+       or (settings.SERVER_PORT == 443 and settings.SERVER_PROTOCOL == "https")):
+        return "{0}://{1}{2}".format(
+            settings.SERVER_PROTOCOL,
+            settings.SERVER_HOST,
+            settings.SERVER_BASE_PATH
+        )
+    else:
+        return "{0}://{1}:{2}{3}".format(
+            settings.SERVER_PROTOCOL,
+            settings.SERVER_HOST,
+            settings.SERVER_PORT,
+            settings.SERVER_BASE_PATH
+        )
+
 
 class FooBadgesCmdClient(Cmd):
     def do_EOF(self, args):
@@ -57,11 +74,11 @@ class FooBadgesCmdClient(Cmd):
             "criteria": criteria,
             "alignments": alignments,
             "tags": tags,
-            "issuer": "/issuer"
+            "issuer": "{}issuer".format(base_url(settings))
         })
 
     def do_new_assertion(self, args):
-        _id = uuid4()
+        _id = uuid4().hex
 
         identity_salt = uuid4().hex[:5]
         identity_type = "email"
@@ -78,10 +95,10 @@ class FooBadgesCmdClient(Cmd):
             print("  - {}".format(badge['_id']))
 
         badge_slug = input("Slug: ")
-        badge_url = "/badge/{}".format(badge_slug)
-        badge_img = "/badge_image/{}.png".format(badge_slug)
+        badge_url = "{}badge/{}".format(base_url(settings), badge_slug)
+        badge_img = "{}badge_image/{}.png".format(base_url(settings), badge_slug)
 
-        assertion_url = "/assertion/{}".format(_id)
+        assertion_url = "{}assertion/{}".format(base_url(settings), _id)
 
         data = {
             "_id": _id,
@@ -97,8 +114,8 @@ class FooBadgesCmdClient(Cmd):
                 "type": "hosted",
                 "url": assertion_url,
             },
-            "issuedOn": datetime.now("%Y-%m-%d"),
-            "image": generateBadgeImage(badge_img, _id)
+            "issuedOn": date.today().isoformat(),
+            "image": generate_badge_image(badge_img, _id)
         }
 
         if expires:
@@ -108,6 +125,7 @@ class FooBadgesCmdClient(Cmd):
             data["evidence"] = evidence
 
         db.assertions.insert(data)
+        print("Created assertion:", assertion_url)
 
 if __name__ == '__main__':
     cmd = FooBadgesCmdClient()
